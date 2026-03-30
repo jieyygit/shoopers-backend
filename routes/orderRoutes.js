@@ -60,8 +60,6 @@ router.get('/:id', verifyToken, async (req, res) => {
 
 // POST /orders - checkout from cart
 router.post('/', verifyToken, async (req, res) => {
-    const session = await mongoose.startSession();
-
     try {
         const { shippingAddress } = req.body;
         const safeAddress = typeof shippingAddress === 'string' ? shippingAddress.trim() : '';
@@ -70,10 +68,11 @@ router.post('/', verifyToken, async (req, res) => {
             throw badRequestError('Shipping address is required');
         }
 
-        let createdOrder = null;
+        const runCheckout = async (session = null) => {
+            const query = Cart.findOne({ userId: req.user.id });
+            if (session) query.session(session);
+            const cart = await query;
 
-        await session.withTransaction(async () => {
-            const cart = await Cart.findOne({ userId: req.user.id }).session(session);
             if (!cart || cart.items.length === 0) {
                 throw badRequestError('Cart is empty');
             }
@@ -82,10 +81,12 @@ router.post('/', verifyToken, async (req, res) => {
             let totalAmount = 0;
 
             for (const item of cart.items) {
-                const product = await Product.findOne({
+                const productQuery = Product.findOne({
                     _id: item.productId,
                     isActive: true
-                }).session(session);
+                });
+                if (session) productQuery.session(session);
+                const product = await productQuery;
 
                 if (!product) {
                     throw badRequestError('One or more products are unavailable');
@@ -95,6 +96,7 @@ router.post('/', verifyToken, async (req, res) => {
                     throw badRequestError(`Not enough stock for ${product.name}`);
                 }
 
+                const updateOptions = session ? { new: true, session } : { new: true };
                 const updatedProduct = await Product.findOneAndUpdate(
                     {
                         _id: product._id,
@@ -102,7 +104,7 @@ router.post('/', verifyToken, async (req, res) => {
                         stock: { $gte: item.quantity }
                     },
                     { $inc: { stock: -item.quantity } },
-                    { new: true, session }
+                    updateOptions
                 );
 
                 if (!updatedProduct) {
@@ -119,22 +121,50 @@ router.post('/', verifyToken, async (req, res) => {
                 totalAmount += product.price * item.quantity;
             }
 
-            const orders = await Order.create([{
+            const orderPayload = {
                 userId: req.user.id,
                 items: orderItems,
                 totalAmount,
-                shippingAddress: safeAddress
-            }], { session });
+                shippingAddress: safeAddress,
+                paymentStatus: 'pending'
+            };
 
-            createdOrder = orders[0];
-            await Cart.findOneAndDelete({ userId: req.user.id }, { session });
-        });
+            let createdOrder;
+            if (session) {
+                const createdOrders = await Order.create([orderPayload], { session });
+                createdOrder = createdOrders[0];
+                await Cart.findOneAndDelete({ userId: req.user.id }, { session });
+            } else {
+                createdOrder = await Order.create(orderPayload);
+                await Cart.findOneAndDelete({ userId: req.user.id });
+            }
 
-        res.status(201).json({ message: 'Order placed successfully', order: createdOrder });
+            return createdOrder;
+        };
+
+        let order;
+        const session = await mongoose.startSession();
+        try {
+            await session.withTransaction(async () => {
+                order = await runCheckout(session);
+            });
+        } catch (txErr) {
+            const unsupportedTx =
+                txErr.message &&
+                txErr.message.includes('Transaction numbers are only allowed on a replica set member or mongos');
+
+            if (unsupportedTx) {
+                order = await runCheckout();
+            } else {
+                throw txErr;
+            }
+        } finally {
+            await session.endSession();
+        }
+
+        res.status(201).json({ message: 'Order placed successfully', order });
     } catch (err) {
         res.status(err.status || 500).json({ message: err.message });
-    } finally {
-        await session.endSession();
     }
 });
 

@@ -1,11 +1,10 @@
 const express = require('express');
 const Product = require('../models/ProductModel');
 const { verifyAdmin } = require('../middleware/auth');
-const verifyApiKey = require('../middleware/apiKey');
 
 const router = express.Router();
 
-router.get('/', verifyApiKey, async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const products = await Product.find({ isActive: true });
         res.json(products);
@@ -14,7 +13,7 @@ router.get('/', verifyApiKey, async (req, res) => {
     }
 });
 
-router.get('/:id', verifyApiKey, async (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
         const product = await Product.findOne({
             _id: req.params.id,

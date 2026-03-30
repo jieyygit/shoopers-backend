@@ -2,7 +2,6 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const verifyApiKey = require('../middleware/apiKey');
 const User = require('../models/UserModel');
 const ApiKey = require('../models/ApiKeyModel');
 const { verifyAdmin } = require('../middleware/auth');
@@ -15,13 +14,22 @@ router.post('/register', async (req, res) => {
     try {
         const { firstname, lastname, email, username, password, role } = req.body;
 
+        if (!firstname || !lastname || !email || !username || !password) {
+            return res.status(400).json({ message: 'Missing required registration fields' });
+        }
+
+        if (role && role !== 'user') {
+            return res.status(403).json({ message: 'Role cannot be assigned during self-registration' });
+        }
+
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ message: 'Email already in use' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const user = await User.create({ 
             firstname, lastname, email, username, 
-            password: hashedPassword, role
+            password: hashedPassword,
+            role: 'user'
         });
 
         res.status(201).json({ message: 'User registered successfully', userId: user._id });
