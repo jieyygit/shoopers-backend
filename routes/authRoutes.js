@@ -61,7 +61,7 @@ router.post('/login', async (req, res) => {
 });
 
 // POST /auth/generate-key — admin only
-router.post('/generate-key', verifyAdmin, async (req, res) => {
+router.post('/generate-key', verifyApiKey, verifyAdmin, async (req, res) => {
     try {
         const { name } = req.body;
         const key = crypto.randomBytes(32).toString('hex');
