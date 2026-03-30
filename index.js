@@ -17,7 +17,20 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs/swagger.json', (req, res) => {
+    res.json(swaggerSpec);
+});
+
+app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(null, {
+        explorer: true,
+        swaggerOptions: {
+            url: '/api-docs/swagger.json'
+        }
+    })
+);
 
 app.use('/auth', verifyApiKey, authRoutes);
 app.use('/products', verifyApiKey, productRoutes);
@@ -26,6 +39,10 @@ app.use('/cart', verifyApiKey, cartRoutes);
 app.use('/orders', verifyApiKey, orderRoutes);
 app.use('/payments', verifyApiKey, paymentRoutes);
 
-app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-});
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`Server is running on http://localhost:${port}`);
+    });
+}
+
+module.exports = app;
