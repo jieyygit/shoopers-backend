@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const verifyApiKey = require('../middleware/apiKey');
 const User = require('../models/UserModel');
 const ApiKey = require('../models/ApiKeyModel');
 const { verifyAdmin } = require('../middleware/auth');
