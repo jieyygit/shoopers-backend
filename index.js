@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 require('./connection');
 const verifyApiKey = require('./middleware/apiKey');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -22,7 +23,13 @@ app.use('/users', verifyApiKey, userRoutes);
 app.use('/cart', verifyApiKey, cartRoutes);
 app.use('/orders', verifyApiKey, orderRoutes);
 app.use('/payments', verifyApiKey, paymentRoutes);
+app.use(notFoundHandler);
+app.use(errorHandler);
 
-app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-});
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`Server is running on http://localhost:${port}`);
+    });
+}
+
+module.exports = app;

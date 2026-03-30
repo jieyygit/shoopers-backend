@@ -4,81 +4,81 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/UserModel');
 const ApiKey = require('../models/ApiKeyModel');
+const asyncHandler = require('../middleware/asyncHandler');
 const { verifyAdmin } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
+const AppError = require('../utils/appError');
+const {
+    validateApiKeyBody,
+    validateLoginBody,
+    validateRegisterBody
+} = require('../utils/validators');
 
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET;
 
 // POST /auth/register
-router.post('/register', async (req, res) => {
-    try {
-        const { firstname, lastname, email, username, password, role } = req.body;
+router.post('/register', validateBody(validateRegisterBody), asyncHandler(async (req, res) => {
+    const { firstname, lastname, email, username, password } = req.body;
 
-        if (!firstname || !lastname || !email || !username || !password) {
-            return res.status(400).json({ message: 'Missing required registration fields' });
-        }
+    const existing = await User.findOne({
+        $or: [{ email }, { username }]
+    });
 
-        if (role && role !== 'user') {
-            return res.status(403).json({ message: 'Role cannot be assigned during self-registration' });
-        }
-
-        const existing = await User.findOne({ email });
-        if (existing) return res.status(400).json({ message: 'Email already in use' });
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = await User.create({ 
-            firstname, lastname, email, username, 
-            password: hashedPassword,
-            role: 'user'
-        });
-
-        res.status(201).json({ message: 'User registered successfully', userId: user._id });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+    if (existing) {
+        throw new AppError(400, 'Email or username already in use');
     }
-});
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({
+        firstname,
+        lastname,
+        email,
+        username,
+        password: hashedPassword,
+        role: 'user'
+    });
+
+    res.status(201).json({ message: 'User registered successfully', userId: user._id });
+}));
 
 // POST /auth/login
-router.post('/login', async (req, res) => {
-    try {
-        const { username, password } = req.body;
+router.post('/login', validateBody(validateLoginBody), asyncHandler(async (req, res) => {
+    const { username, password } = req.body;
 
-        const user = await User.findOne({ username });
-        if (!user) return res.status(404).json({ message: 'User not found' });
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: 'Wrong password' });
-
-        const token = jwt.sign(
-            { id: user._id, username: user.username, role: user.role },
-            SECRET,
-            { expiresIn: '1d' }
-        );
-
-        res.json({ 
-            token,
-            user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
-                role: user.role
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+    const user = await User.findOne({ username });
+    if (!user) {
+        throw new AppError(404, 'User not found');
     }
-});
 
-// POST /auth/generate-key — admin only
-router.post('/generate-key', verifyAdmin, async (req, res) => {
-    try {
-        const { name } = req.body;
-        const key = crypto.randomBytes(32).toString('hex');
-        const apiKey = await ApiKey.create({ key, name });
-        res.status(201).json({ message: 'API key generated', apiKey });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+        throw new AppError(401, 'Wrong password');
     }
-});
+
+    const token = jwt.sign(
+        { id: user._id, username: user.username, role: user.role },
+        SECRET,
+        { expiresIn: '1d' }
+    );
+
+    res.json({
+        token,
+        user: {
+            id: user._id,
+            username: user.username,
+            email: user.email,
+            role: user.role
+        }
+    });
+}));
+
+// POST /auth/generate-key - admin only
+router.post('/generate-key', verifyAdmin, validateBody(validateApiKeyBody), asyncHandler(async (req, res) => {
+    const { name } = req.body;
+    const key = crypto.randomBytes(32).toString('hex');
+    const apiKey = await ApiKey.create({ key, name });
+    res.status(201).json({ message: 'API key generated', apiKey });
+}));
 
 module.exports = router;

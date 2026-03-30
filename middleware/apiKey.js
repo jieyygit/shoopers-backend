@@ -1,16 +1,21 @@
 const ApiKey = require('../models/ApiKeyModel');
+const AppError = require('../utils/appError');
 
 const verifyApiKey = async (req, res, next) => {
     try {
         const apiKey = req.header('x-api-key');
-        if (!apiKey) return res.status(401).json({ message: 'No API key provided' });
+        if (!apiKey) {
+            throw new AppError(401, 'No API key provided');
+        }
 
         const validKey = await ApiKey.findOne({ key: apiKey, isActive: true });
-        if (!validKey) return res.status(403).json({ message: 'Invalid API key' });
+        if (!validKey) {
+            throw new AppError(403, 'Invalid API key');
+        }
 
         next();
     } catch (err) {
-        res.status(500).json({ message: `API key validation failed: ${err.message}` });
+        next(err);
     }
 };
 
