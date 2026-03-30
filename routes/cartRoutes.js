@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Cart = require('../models/CartModel');
 const Product = require('../models/ProductModel');
 const { verifyToken } = require('../middleware/auth');
@@ -22,6 +23,10 @@ router.post('/', verifyToken, async (req, res) => {
     try {
         const { productId, quantity } = req.body;
         const parsedQuantity = Number(quantity ?? 1);
+
+        if (!mongoose.Types.ObjectId.isValid(productId)) {
+            return res.status(400).json({ message: 'Invalid productId' });
+        }
 
         if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
             return res.status(400).json({ message: 'Quantity must be a positive integer' });
@@ -76,6 +81,10 @@ router.post('/', verifyToken, async (req, res) => {
 // DELETE /cart/:productId - remove item from cart
 router.delete('/:productId', verifyToken, async (req, res) => {
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.productId)) {
+            return res.status(400).json({ message: 'Invalid productId' });
+        }
+
         const cart = await Cart.findOne({ userId: req.user.id });
         if (!cart) return res.status(404).json({ message: 'Cart not found' });
 
